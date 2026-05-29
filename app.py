@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import json
+import google.api_core.exceptions
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vehicle Diagnostic AI", layout="wide")
@@ -30,7 +31,6 @@ def load_data():
 def get_simplified_fix(row):
     model = genai.GenerativeModel('gemini-3.5-flash')
     
-    # We pass the row data into the same "Strict" prompt
     prompt = f"""
     You are an AI Vehicle Fault Assistant for beginners.
     Rewrite the provided technical vehicle repair instructions into simple, 5th-grade level English.
@@ -49,8 +49,23 @@ def get_simplified_fix(row):
     **Step-by-Step Fix:** [Numbered list of simplified steps]
     **When to Call a Mechanic:** [Simplified mechanic advice]
     """
-    response = model.generate_content(prompt)
-    return response.text
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except google.api_core.exceptions.ResourceExhausted:
+        # Fallback to displaying raw text so the app doesn't crash during evaluation
+        fallback_text = f"""
+        ⚠️ **Notice:** AI simplification limit reached. Showing raw database instructions.
+        
+        **Diagnosis:** {row['possible_fault']}
+        **Tools Needed:** {row['tools_needed']}
+        **Safety First:** {row['safety_warning']}
+        **Step-by-Step Fix:** {row['beginner_steps']}
+        **When to Call a Mechanic:** {row['mechanic_advice']}
+        """
+        return fallback_text
+    except Exception as e:
+        return f"Error simplifying text: {str(e)}"
 
 # --- 3. AI ENGINE (Optimized for Detail) ---
 def get_ai_diagnosis(user_input):
