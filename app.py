@@ -71,7 +71,6 @@ def get_simplified_fix(row):
 def get_ai_diagnosis(user_input):
     model = genai.GenerativeModel('gemini-3.5-flash')
     
-    # This prompt maintains your STRICT formatting rules and the JSON output for self-healing
     prompt = f"""
     You are an AI Vehicle Fault Assistant for beginners with zero automotive knowledge.
     The user is reporting this issue: "{user_input}"
@@ -102,8 +101,8 @@ def get_ai_diagnosis(user_input):
     }}
     """
     
-    response = model.generate_content(prompt)
     try:
+        response = model.generate_content(prompt)
         # Clean response and parse JSON
         text = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(text)
@@ -113,9 +112,24 @@ def get_ai_diagnosis(user_input):
         new_row.to_csv(FILE_1, mode='a', header=False, index=False)
         
         return data['ui_response']
+        
+    except google.api_core.exceptions.ResourceExhausted:
+        # Custom fallback message when the free tier limit drops out
+        error_ui = """
+        ⚠️ **System Status Notice:** The system is currently handling high diagnostic traffic. 
+        
+        **Diagnosis:** Temporary API connection rate-limit reached.
+        **Tools Needed:** None required.
+        **Safety First:** **Please check your dashboard indicators carefully.**
+        **Step-by-Step Fix:** 1. Wait 60 seconds for the free-tier API window to clear.
+        2. Click the **Diagnose** button again to retry your request.
+        3. If the issue persists, browse the predefined categories in the **Browse Known Faults** tab.
+        **When to Call a Mechanic:** If you require immediate roadside emergency assistance.
+        """
+        return error_ui
+        
     except Exception as e:
         return f"Error diagnosing issue: {str(e)}"
-
 # --- 4. UI INTERFACE ---
 st.title("🚗 AI Vehicle Diagnostic Assistant")
 tab1, tab2 = st.tabs(["🔍 Browse Known Faults", "🤖 AI Assistant"])
