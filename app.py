@@ -1,160 +1,234 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
+import os
 import json
-import google.api_core.exceptions
 
-# --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Vehicle Diagnostic AI", layout="wide")
-genai.configure(api_key=st.secrets["API_KEY"])
+# --- PAGE CONFIGURATION & CUSTOM CSS ---
+st.set_page_config(page_title="AI Vehicle Diagnostic Assistant", layout="wide", page_icon="🚗")
 
-FILE_1 = "expanded_vehicle_fault_dataset.csv"
-FILE_2 = "merged_vehicle_fault_dataset.csv"
+st.markdown("""
+    <style>
+    /* Make the Sidebar Navigation Huge */
+    .css-1544g2n {padding-top: 2rem;}
+    .stRadio > div > label > div {font-size: 24px !important; font-weight: bold; margin-bottom: 10px;}
+    
+    /* Make the Diagnose Buttons Big and Eye-Catching */
+    div.stButton > button:first-child {
+        background-color: #28a745;
+        color: white;
+        height: 60px;
+        width: 100%;
+        border-radius: 12px;
+        font-size: 22px;
+        font-weight: bold;
+        border: 2px solid #1e7e34;
+        transition: 0.3s;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #218838;
+        border: 2px solid #1c7430;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# --- 2. DATA LOAD & INTELLIGENT MERGE ---
+# --- API KEY CONFIGURATION (CRASH-PROOF) ---
+api_key = os.environ.get("API_KEY") or os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    try:
+        api_key = st.secrets.get("API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    except Exception:
+        pass
+
+if api_key:
+    genai.configure(api_key=api_key)
+else:
+    st.sidebar.error("API Key not found! Please check your settings.")
+
+# --- DATASET LOADING ---
+FILE_NAME = "expanded_vehicle_fault_dataset.csv"
+
 @st.cache_data
 def load_data():
-    df1 = pd.read_csv(FILE_1)
-    df2 = pd.read_csv(FILE_2)
-    
-    cols_needed = ['vehicle_type', 'category', 'subcategory', 'symptom', 'possible_fault', 
-                   'severity', 'user_fixable', 'tools_needed', 'beginner_steps', 
-                   'mechanic_advice', 'safety_warning']
-    
-    for col in cols_needed:
-        if col not in df1.columns: df1[col] = "N/A"
-        if col not in df2.columns: df2[col] = "N/A"
-    
-    combined_df = pd.concat([df1[cols_needed], df2[cols_needed]], ignore_index=True)
-    return combined_df.drop_duplicates()
+    try:
+        return pd.read_csv(FILE_NAME)
+    except FileNotFoundError:
+        st.error(f"Dataset {FILE_NAME} not found. Please ensure it is uploaded.")
+        return pd.DataFrame()
 
+df = load_data()
+
+# --- UNIFIED UI RENDERER ---
+def render_diagnostic_ui(data):
+    """Renders the completely styled UI output for both Tabs so they look identical"""
+    
+    if data.get('is_fallback'):
+         st.warning("⚠️ **SYSTEM NOTICE: AI API Limit Reached. Currently running in offline database mode.**", icon="⏳")
+
+    # 1. HUGE SAFETY WARNING BOX
+    st.markdown(f"""
+    <div style="background-color: #ffe6e6; padding: 25px; border-radius: 12px; border-left: 10px solid #cc0000; margin-bottom: 25px;">
+        <h1 style="color: #cc0000; margin-top: 0; font-size: 32px;">🚨 SAFETY FIRST</h1>
+        <p style="color: #990000; font-size: 22px; font-weight: bold; margin-bottom: 0;">{data['safety']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. HUGE MECHANIC ADVICE BOX (Only shows if mechanic is needed)
+    mechanic_text = str(data.get('mechanic', '')).strip()
+    if mechanic_text and mechanic_text.lower() not in ["no", "none", "n/a", ""]:
+         st.markdown(f"""
+        <div style="background-color: #fff4cc; padding: 25px; border-radius: 12px; border-left: 10px solid #ffcc00; margin-bottom: 25px;">
+            <h1 style="color: #b38f00; margin-top: 0; font-size: 32px;">🛠️ MECHANIC ADVICE</h1>
+            <p style="color: #806600; font-size: 22px; font-weight: bold; margin-bottom: 0;">{mechanic_text}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 3. DIAGNOSIS, TOOLS & STEPS
+    st.markdown("---")
+    st.markdown(f"### 🔍 **Diagnosis:**\n{data['diagnosis']}")
+    st.markdown(f"### 🧰 **Tools Needed:**\n{data['tools']}")
+    st.markdown("### 📋 **Step-by-Step Fix:**")
+    st.markdown(data['steps'])
+
+
+# --- CORE LOGIC FUNCTIONS ---
 def get_simplified_fix(row):
     model = genai.GenerativeModel('gemini-3.5-flash')
     
     prompt = f"""
-    You are an AI Vehicle Fault Assistant for beginners.
     Rewrite the provided technical vehicle repair instructions into simple, 5th-grade level English.
+    DATASET: Fault: {row['possible_fault']} | Tools: {row['tools_needed']} | Steps: {row['beginner_steps']} | Safety: {row['safety_warning']} | Mechanic: {row['mechanic_advice']}
     
-    DATASET CONTEXT:
-    - Fault: {row['possible_fault']}
-    - Tools Needed: {row['tools_needed']}
-    - Steps: {row['beginner_steps']}
-    - Safety Warning: {row['safety_warning']}
-    - Mechanic Advice: {row['mechanic_advice']}
-    
-    FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
-    **Diagnosis:** [Simple explanation of the fault]
-    **Tools Needed:** [List tools simply]
-    **Safety First:** [Simplified safety warning in bold]
-    **Step-by-Step Fix:** [Numbered list of simplified steps]
-    **When to Call a Mechanic:** [Simplified mechanic advice]
+    Return ONLY a valid JSON object exactly like this:
+    {{
+        "safety": "[Simplified safety warning]",
+        "mechanic": "[Simplified mechanic advice]",
+        "diagnosis": "[Simplified explanation of the fault]",
+        "tools": "[List tools simply]",
+        "steps": "[Numbered list of simplified steps]"
+    }}
     """
     try:
         response = model.generate_content(prompt)
-        return response.text
-    except google.api_core.exceptions.ResourceExhausted:
-        # Fallback to displaying raw text so the app doesn't crash during evaluation
-        fallback_text = f"""
-        ⚠️ **Notice:** AI simplification limit reached. Showing raw database instructions.
-        
-        **Diagnosis:** {row['possible_fault']}
-        **Tools Needed:** {row['tools_needed']}
-        **Safety First:** {row['safety_warning']}
-        **Step-by-Step Fix:** {row['beginner_steps']}
-        **When to Call a Mechanic:** {row['mechanic_advice']}
-        """
-        return fallback_text
-    except Exception as e:
-        return f"Error simplifying text: {str(e)}"
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        data = json.loads(text)
+        data['is_fallback'] = False
+        return data
+    except Exception:
+        # FALLBACK: If API is blocked, format the RAW dataset cleanly!
+        return {
+            "safety": row['safety_warning'],
+            "mechanic": row['mechanic_advice'],
+            "diagnosis": row['possible_fault'],
+            "tools": row['tools_needed'],
+            "steps": row['beginner_steps'],
+            "is_fallback": True
+        }
 
-# --- 3. AI ENGINE (Optimized for Detail) ---
 def get_ai_diagnosis(user_input):
     model = genai.GenerativeModel('gemini-3.5-flash')
     
     prompt = f"""
-    You are an AI Vehicle Fault Assistant for beginners with zero automotive knowledge.
-    The user is reporting this issue: "{user_input}"
+    The user reports this vehicle issue: "{user_input}"
+    Provide a diagnostic guide in simple, 5th-grade level English.
     
-    Your job is to provide a diagnostic guide for this issue in simple, 5th-grade level English.
-    
-    STRICT RULES:
-    1. DO NOT invent tools.
-    2. Keep explanations simple.
-    3. Emphasize the safety warning.
-    
-    Return ONLY a valid JSON object with this exact structure:
+    Return ONLY a valid JSON object exactly like this:
     {{
-        "ui_response": "**Diagnosis:** [Explanation]\\n**Tools Needed:** [List tools simply]\\n**Safety First:** [Simplified safety warning in bold]\\n**Step-by-Step Fix:** [Numbered list of simplified steps]\\n**When to Call a Mechanic:** [Simplified mechanic advice]",
+        "safety": "[Strong safety warning]",
+        "mechanic": "[When to call a mechanic]",
+        "diagnosis": "[Explanation of the potential fault]",
+        "tools": "[List tools simply]",
+        "steps": "[Numbered list of diagnostic steps]",
         "csv_data": {{
-            "vehicle_type": "Car", 
-            "category": "General", 
-            "subcategory": "General", 
-            "symptom": "{user_input[:50]}", 
-            "possible_fault": "AI Generated Diagnosis", 
-            "severity": "Medium", 
-            "user_fixable": "Yes", 
-            "tools_needed": "Basic tools", 
-            "beginner_steps": "Follow generated steps", 
-            "mechanic_advice": "Consult a professional", 
+            "vehicle_type": "Car", "category": "General", "subcategory": "AI", 
+            "symptom": "{user_input[:50]}", "possible_fault": "AI Generated", 
+            "severity": "Medium", "user_fixable": "Yes", "tools_needed": "Basic tools", 
+            "beginner_steps": "Follow AI steps", "mechanic_advice": "Consult professional", 
             "safety_warning": "Exercise caution"
         }}
     }}
     """
-    
     try:
         response = model.generate_content(prompt)
-        # Clean response and parse JSON
         text = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(text)
         
-        # Save to CSV for the "Self-Healing" logic
-        new_row = pd.DataFrame([data['csv_data']])
-        new_row.to_csv(FILE_1, mode='a', header=False, index=False)
-        
-        return data['ui_response']
-        
-    except google.api_core.exceptions.ResourceExhausted:
-        # Custom fallback message when the free tier limit drops out
-        error_ui = """
-        ⚠️ **System Status Notice:** The system is currently handling high diagnostic traffic. 
-        
-        **Diagnosis:** Temporary API connection rate-limit reached.
-        **Tools Needed:** None required.
-        **Safety First:** **Please check your dashboard indicators carefully.**
-        **Step-by-Step Fix:** 1. Wait 60 seconds for the free-tier API window to clear.
-        2. Click the **Diagnose** button again to retry your request.
-        3. If the issue persists, browse the predefined categories in the **Browse Known Faults** tab.
-        **When to Call a Mechanic:** If you require immediate roadside emergency assistance.
-        """
-        return error_ui
-        
-    except Exception as e:
-        return f"Error diagnosing issue: {str(e)}"
-# --- 4. UI INTERFACE ---
-st.title("🚗 AI Vehicle Diagnostic Assistant")
-tab1, tab2 = st.tabs(["🔍 Browse Known Faults", "🤖 AI Assistant"])
+        # Save to CSV
+        try:
+            pd.DataFrame([data['csv_data']]).to_csv(FILE_NAME, mode='a', header=False, index=False)
+        except Exception:
+            pass
+            
+        data['is_fallback'] = False
+        return data
+    except Exception:
+        # FALLBACK: Provide a safe generic response if API is blocked
+        return {
+            "safety": "Always park on a flat surface, engage the parking brake, and let the engine cool completely before inspecting.",
+            "mechanic": "If you notice smoke, active fluid leaks, or require specialized diagnostic equipment.",
+            "diagnosis": f"Potential issue related to: '{user_input}'. Please check your dashboard indicators.",
+            "tools": "Standard hand tools, protective gloves, flashlight.",
+            "steps": "1. Wait for the free-tier API window to clear.\n2. Visually inspect the area for obvious loose wires or leaks.\n3. Try browsing the 'Predefined Categories' tab for offline solutions.",
+            "is_fallback": True
+        }
 
-df = load_data()
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.title("🧭 Navigation Menu")
+st.sidebar.markdown("---")
+app_mode = st.sidebar.radio(
+    "Select an Option:",
+    ["📚 Predefined Categories", "🤖 AI Assistant"]
+)
+st.sidebar.markdown("---")
 
-with tab1:
-    st.header("Search Knowledge Base")
-    # Filters
-    cat = st.selectbox("Category", df['category'].unique())
-    sub = st.selectbox("Subcategory", df[df['category'] == cat]['subcategory'].unique())
-    symp = st.selectbox("Symptom", df[(df['category'] == cat) & (df['subcategory'] == sub)]['symptom'].unique())
+# --- TAB 1: PREDEFINED CATEGORIES ---
+if app_mode == "📚 Predefined Categories":
+    st.title("📚 Browse Known Faults")
+    st.write("Select your vehicle's symptoms from the interactive menus below.")
     
-    if st.button("View Fix"):
-        # Select the specific row from your dataframe
-        row = df[(df['category'] == cat) & (df['subcategory'] == sub) & (df['symptom'] == symp)].iloc[0]
+    if not df.empty:
+        col1, col2, col3 = st.columns(3)
         
-        # Use a spinner while Gemini processes the simplification
-        with st.spinner("Simplifying solution for you..."):
-            # Call your new function to get the structured, beginner-friendly format
-            st.markdown(get_simplified_fix(row))
+        with col1:
+            categories = df['category'].dropna().unique()
+            selected_category = st.selectbox("1️⃣ Select Category", categories)
+            
+        with col2:
+            subcats = df[df['category'] == selected_category]['subcategory'].dropna().unique()
+            selected_subcategory = st.selectbox("2️⃣ Select Subcategory", subcats)
+            
+        with col3:
+            symptoms = df[(df['category'] == selected_category) & (df['subcategory'] == selected_subcategory)]['symptom'].dropna().unique()
+            selected_symptom = st.selectbox("3️⃣ Select Specific Issue", symptoms)
 
-with tab2:
-    st.header("Ask AI")
-    user_q = st.text_area("Describe your issue:")
-    if st.button("Diagnose"):
-        with st.spinner("Expert mechanic is analyzing..."):
-            st.markdown(get_ai_diagnosis(user_q))
+        st.markdown("<br>", unsafe_allow_html=True) # Adds spacing
+        
+        # The API is ONLY called when this huge button is clicked
+        if st.button("🛠️ Diagnose Issue"):
+            with st.spinner("Analyzing database and simplifying instructions..."):
+                selected_row = df[
+                    (df['category'] == selected_category) & 
+                    (df['subcategory'] == selected_subcategory) & 
+                    (df['symptom'] == selected_symptom)
+                ].iloc[0]
+                
+                result_data = get_simplified_fix(selected_row)
+                render_diagnostic_ui(result_data)
+
+# --- TAB 2: AI ASSISTANT ---
+elif app_mode == "🤖 AI Assistant":
+    st.title("🤖 AI Diagnostic Assistant")
+    st.write("Describe your vehicle's problem in your own words.")
+    
+    user_query = st.text_area("What is happening with your vehicle?", height=150, placeholder="Example: My car shakes violently when I brake at high speeds...")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # The API is ONLY called when this huge button is clicked
+    if st.button("🧠 Diagnose with AI"):
+        if user_query.strip():
+            with st.spinner("Processing symptoms with Google Gemini..."):
+                result_data = get_ai_diagnosis(user_query)
+                render_diagnostic_ui(result_data)
+        else:
+            st.error("Please describe your issue in the text box before clicking Diagnose.")
