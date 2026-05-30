@@ -186,6 +186,10 @@ if app_mode == "📚 Predefined Categories":
     st.title("📚 Browse Known Faults")
     st.write("Select your vehicle's symptoms from the interactive menus below.")
     
+    # Create a memory state for Tab 1
+    if "tab1_memory" not in st.session_state:
+        st.session_state.tab1_memory = None
+
     if not df.empty:
         col1, col2, col3 = st.columns(3)
         
@@ -201,9 +205,9 @@ if app_mode == "📚 Predefined Categories":
             symptoms = df[(df['category'] == selected_category) & (df['subcategory'] == selected_subcategory)]['symptom'].dropna().unique()
             selected_symptom = st.selectbox("3️⃣ Select Specific Issue", symptoms)
 
-        st.markdown("<br>", unsafe_allow_html=True) # Adds spacing
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        # The API is ONLY called when this huge button is clicked
+        # When clicked, save the result into memory
         if st.button("🛠️ Diagnose Issue"):
             with st.spinner("Analyzing database and simplifying instructions..."):
                 selected_row = df[
@@ -212,23 +216,35 @@ if app_mode == "📚 Predefined Categories":
                     (df['symptom'] == selected_symptom)
                 ].iloc[0]
                 
-                result_data = get_simplified_fix(selected_row)
-                render_diagnostic_ui(result_data)
+                # Fetch and SAVE to memory
+                st.session_state.tab1_memory = get_simplified_fix(selected_row)
+        
+        # Always display whatever is in memory, preventing wasted API calls!
+        if st.session_state.tab1_memory:
+            render_diagnostic_ui(st.session_state.tab1_memory)
 
 # --- TAB 2: AI ASSISTANT ---
 elif app_mode == "🤖 AI Assistant":
     st.title("🤖 AI Diagnostic Assistant")
     st.write("Describe your vehicle's problem in your own words.")
     
+    # Create a memory state for Tab 2
+    if "tab2_memory" not in st.session_state:
+        st.session_state.tab2_memory = None
+        
     user_query = st.text_area("What is happening with your vehicle?", height=150, placeholder="Example: My car shakes violently when I brake at high speeds...")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # The API is ONLY called when this huge button is clicked
+    # When clicked, save the result into memory
     if st.button("🧠 Diagnose with AI"):
         if user_query.strip():
             with st.spinner("Processing symptoms with Google Gemini..."):
-                result_data = get_ai_diagnosis(user_query)
-                render_diagnostic_ui(result_data)
+                # Fetch and SAVE to memory
+                st.session_state.tab2_memory = get_ai_diagnosis(user_query)
         else:
             st.error("Please describe your issue in the text box before clicking Diagnose.")
+            
+    # Always display whatever is in memory!
+    if st.session_state.tab2_memory:
+        render_diagnostic_ui(st.session_state.tab2_memory)
