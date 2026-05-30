@@ -184,7 +184,7 @@ st.sidebar.markdown("---")
 # --- TAB 1: PREDEFINED CATEGORIES ---
 if app_mode == "📚 Predefined Categories":
     st.title("📚 Browse Known Faults")
-    st.write("Select your vehicle's symptoms from the interactive menus below.")
+    st.write("Select your vehicle's symptoms from the menus below.")
     
     # Create a memory state for Tab 1
     if "tab1_memory" not in st.session_state:
