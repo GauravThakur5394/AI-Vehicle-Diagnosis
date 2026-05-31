@@ -446,7 +446,7 @@ const mSteer = getMat("STEERING", 0xcc44ff, 0.9);
 const swGroup = new THREE.Group();
 swGroup.position.set(-0.78, 1.46, -0.22);
 swGroup.rotation.x = -Math.PI / 6;
-swGroup.rotation.y = Math.PI / 2; // Fixed rotation to point towards driver seat
+swGroup.rotation.y = Math.PI / 2;
 
 carGroup.add(swGroup);
 
@@ -583,8 +583,18 @@ if app_mode == "📚 Predefined Categories":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # MOVED BUTTON ABOVE THE 3D MODEL
-        if st.button("🛠️ Diagnose Issue"):
+        # FIX: Define separate UI layout slots so visual order matches user intent, 
+        # but execution order forces the model to render before the blocking API code.
+        btn_slot = st.empty()
+        model_slot = st.empty()
+        
+        # Force the model to render immediately in its designated slot
+        with model_slot:
+            render_3d_hologram(selected_category)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Render the button inside its designated slot above the model
+        if btn_slot.button("🛠️ Diagnose Issue"):
             loading_container = st.empty()
             loading_container.markdown("""
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px;">
@@ -606,10 +616,6 @@ if app_mode == "📚 Predefined Categories":
             
             st.session_state.tab1_memory = get_simplified_fix(selected_row)
             loading_container.empty()
-
-        # 3D Hologram tracks category selection updates instantly
-        render_3d_hologram(selected_category)
-        st.markdown("<br>", unsafe_allow_html=True)
         
         if st.session_state.tab1_memory:
             render_diagnostic_ui(st.session_state.tab1_memory)
@@ -626,8 +632,18 @@ elif app_mode == "🤖 AI Assistant":
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # MOVED BUTTON ABOVE THE 3D MODEL
-    if st.button("🧠 Diagnose with AI"):
+    # FIX: Define layout placeholders for the button and 3D model
+    ai_btn_slot = st.empty()
+    ai_model_slot = st.empty()
+    
+    # Force the model to load into its slot first so it stays on screen during the API call
+    current_ai_cat = st.session_state.tab2_memory.get("category", "DEFAULT") if st.session_state.tab2_memory else "DEFAULT"
+    with ai_model_slot:
+        render_3d_hologram(current_ai_cat)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Render the AI button inside its designated slot above the model
+    if ai_btn_slot.button("🧠 Diagnose with AI"):
         if user_query.strip():
             loading_container = st.empty()
             loading_container.markdown("""
@@ -642,20 +658,12 @@ elif app_mode == "🤖 AI Assistant":
                 </style>
             """, unsafe_allow_html=True)
             
-            # Fetch AI diagnostic dictionary matching data payload profiles
             ai_res = get_ai_diagnosis(user_query)
             st.session_state.tab2_memory = ai_res
             loading_container.empty()
-            
-            # Rerun script once to refresh the canvas positions smoothly with the new AI target profile
             st.rerun()
         else:
             st.error("Please describe your issue in the text box before clicking Diagnose.")
-
-    # Render unified 3D platform onto the screen on the AI space
-    current_ai_cat = st.session_state.tab2_memory.get("category", "DEFAULT") if st.session_state.tab2_memory else "DEFAULT"
-    render_3d_hologram(current_ai_cat)
-    st.markdown("<br>", unsafe_allow_html=True)
             
     if st.session_state.tab2_memory:
         render_diagnostic_ui(st.session_state.tab2_memory)
