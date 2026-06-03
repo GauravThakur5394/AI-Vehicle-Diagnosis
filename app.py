@@ -8,24 +8,37 @@ import streamlit.components.v1 as components
 # --- PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(page_title="AI Vehicle Diagnostic Assistant", layout="wide", page_icon="🚗")
 
-st.markdown("""
-    <style>
-    /* 1. Global Background Image with Dark Overlay for readability */
+# --- THEME TOGGLE (Dark/Light Mode) ---
+if "theme_mode" not in st.session_state:
+    st.session_state.theme_mode = "dark"
+
+with st.sidebar:
+    st.markdown("---")
+    st.write("**🎨 Theme Settings**")
+    col_theme1, col_theme2 = st.columns(2)
+    with col_theme1:
+        if st.button("🌙 Dark", use_container_width=True, key="dark_btn"):
+            st.session_state.theme_mode = "dark"
+            st.rerun()
+    with col_theme2:
+        if st.button("☀️ Light", use_container_width=True, key="light_btn"):
+            st.session_state.theme_mode = "light"
+            st.rerun()
+    st.markdown("---")
+
+# --- DYNAMIC CSS BASED ON THEME ---
+if st.session_state.theme_mode == "dark":
+    THEME_CSS = """
     .stApp {
         background-image: linear-gradient(rgba(10, 14, 23, 0.85), rgba(10, 14, 23, 0.85)), url('https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=2070');
         background-size: cover;
         background-attachment: fixed;
         color: #e0e0e0;
     }
-    
-    /* Make sidebars match the dark theme */
     [data-testid="stSidebar"] {
         background-color: rgba(15, 20, 30, 0.95) !important;
     }
-    
     .stRadio > div > label > div {font-size: 24px !important; font-weight: bold; margin-bottom: 10px; color: #00ffff;}
-    
-    /* Big Diagnose Buttons */
     div.stButton > button:first-child {
         background-color: transparent;
         color: #00ffff;
@@ -42,8 +55,6 @@ st.markdown("""
         background-color: rgba(0, 255, 255, 0.1);
         box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
     }
-
-    /* Severity Animations */
     @keyframes pulse-critical {
         0% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0.7); }
         70% { box-shadow: 0 0 20px 10px rgba(255, 50, 50, 0); }
@@ -59,9 +70,51 @@ st.markdown("""
     .severity-low {
         border-left: 10px solid #00ffcc !important;
     }
-    </style>
-""", unsafe_allow_html=True)
+    """
+else:  # LIGHT MODE
+    THEME_CSS = """
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 100%);
+        color: #333333;
+    }
+    [data-testid="stSidebar"] {
+        background-color: rgba(255, 255, 255, 0.95) !important;
+    }
+    .stRadio > div > label > div {font-size: 24px !important; font-weight: bold; margin-bottom: 10px; color: #0066cc;}
+    div.stButton > button:first-child {
+        background-color: transparent;
+        color: #0066cc;
+        height: 60px;
+        width: 100%;
+        border-radius: 8px;
+        font-size: 22px;
+        font-weight: bold;
+        border: 2px solid #0066cc;
+        box-shadow: 0 0 10px rgba(0, 102, 204, 0.2);
+        transition: 0.3s;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: rgba(0, 102, 204, 0.1);
+        box-shadow: 0 0 20px rgba(0, 102, 204, 0.6);
+    }
+    @keyframes pulse-critical {
+        0% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0.7); }
+        70% { box-shadow: 0 0 20px 10px rgba(255, 50, 50, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0); }
+    }
+    .severity-critical {
+        border-left: 10px solid #ff3232 !important;
+        animation: pulse-critical 2s infinite;
+    }
+    .severity-moderate {
+        border-left: 10px solid #ffaa00 !important;
+    }
+    .severity-low {
+        border-left: 10px solid #00aa77 !important;
+    }
+    """
 
+st.markdown(f"<style>{THEME_CSS}</style>", unsafe_allow_html=True)
 # --- API KEY CONFIGURATION (CRASH-PROOF) ---
 api_key = os.environ.get("API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key:
