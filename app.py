@@ -79,6 +79,7 @@ else:  # LIGHT MODE
     }
     [data-testid="stSidebar"] {
         background-color: rgba(255, 255, 255, 0.95) !important;
+        color: #333333 !important;
     }
     .stRadio > div > label > div {font-size: 24px !important; font-weight: bold; margin-bottom: 10px; color: #0066cc;}
     div.stButton > button:first-child {
@@ -112,9 +113,13 @@ else:  # LIGHT MODE
     .severity-low {
         border-left: 10px solid #00aa77 !important;
     }
+    h1, h2, h3, h4, h5, h6 { color: #1a1a1a !important; }
+    p, div, span, label { color: #333333 !important; }
     """
 
 st.markdown(f"<style>{THEME_CSS}</style>", unsafe_allow_html=True)
+
+
 # --- API KEY CONFIGURATION (CRASH-PROOF) ---
 api_key = os.environ.get("API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key:
