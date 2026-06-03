@@ -115,6 +115,43 @@ else:  # LIGHT MODE
     }
     h1, h2, h3, h4, h5, h6 { color: #1a1a1a !important; }
     p, div, span, label { color: #333333 !important; }
+    
+    /* Selectbox and Dropdown Styling */
+    .stSelectbox div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border: 2px solid #0066cc !important;
+    }
+    .stSelectbox [data-baseweb="select"] div {
+        color: #333333 !important;
+    }
+    [data-baseweb="select"] div:first-child {
+        color: #333333 !important;
+    }
+    [role="listbox"] {
+        background-color: #ffffff !important;
+        color: #333333 !important;
+    }
+    [role="option"] {
+        color: #333333 !important;
+        background-color: #ffffff !important;
+    }
+    [role="option"]:hover {
+        background-color: #e0e8f8 !important;
+    }
+    
+    /* Input fields */
+    .stTextInput input,
+    .stTextArea textarea {
+        background-color: #ffffff !important;
+        color: #333333 !important;
+        border: 2px solid #0066cc !important;
+    }
+    
+    /* Placeholder text */
+    .stTextInput input::placeholder,
+    .stTextArea textarea::placeholder {
+        color: #999999 !important;
+    }
     """
 
 st.markdown(f"<style>{THEME_CSS}</style>", unsafe_allow_html=True)
